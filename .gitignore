@@ -1,0 +1,19 @@
+# 环境 / 数据
+.venv/
+venv/
+__pycache__/
+*.pyc
+data/okx_raw/*.json
+
+# 本地凭证（勿提交）
+.github_token
+.gh_token
+env/.env
+*.token
+
+# 系统
+.DS_Store
+Thumbs.db
+
+# 过程产物（保留 results/ 下的关键交付物，忽略临时输出）
+results/*_out.txt
