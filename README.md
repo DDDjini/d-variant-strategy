@@ -44,6 +44,24 @@ python -m venv .venv
 
 > 数据：OKX 永续 `BTC-USDT-SWAP` / `ETH-USDT-SWAP`，1DUTC 两年 + 4H 5100 根，见 `scripts/stage4_common.py`。拉取用 `curl`（python urllib 走代理会 502）。
 
+## 实盘信号推送（飞书 webhook）
+
+冻结的 A4 参数已接入实时扫描器，命中信号自动推送到飞书自定义机器人：
+
+```bash
+.venv/Scripts/python scripts/s28_a4_live.py              # 正常扫描并推送
+.venv/Scripts/python scripts/s28_a4_live.py --dry-run    # 只打印卡片，不发飞书
+.venv/Scripts/python scripts/s28_a4_live.py --force-test # 忽略去重，测试推送通道
+```
+
+- 数据源：MEXC 公共行情（无需 Key），复用 `csb_signal_scanner.py` 的字符串策略定义。
+
+  - **国内跑需走代理**：默认 `MEXC_PROXY=http://127.0.0.1:7897`，环境变量可覆盖；海外/CI 置空即可直连。
+  - 拉取用 `curl.exe` 子进程（urllib 走代理 SSL 握手会挂），带 5 次交替直连/代理重试。
+- 信号卡片自动按 **A4 参数** 计算 SL/TP 档位并展示：long 恒 `1.25R`；short `ADX≥20 → 2.25R`（趋势窗）/ 震荡窗 `1.5R`。
+- 去重：`live_state.json` 记录 `symbol|date|dir`，同信号不重复轰炸；无信号时推"等待信号中"状态卡。
+- webhook 固化在 `scripts/feishu_config.json`，可用 `FEISHU_WEBHOOK` 环境变量覆盖。
+
 ## 目录
 
 - `scripts/` — 策略源码 + A系列冻结回测/校验脚本
