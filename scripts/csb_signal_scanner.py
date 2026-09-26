@@ -57,8 +57,8 @@ MEXC_INTERVAL = {'1d': '1d', '4h': '4h'}
 API = 'https://api.mexc.com/api/v3/klines'
 
 # ---------------- 数据获取（MEXC 公共 API） ----------------
-# MEXC 在国内 urllib 走代理会 SSL 握手失败（CA/代理问题），改用 curl.exe 子进程；
-# 环境变量 MEXC_PROXY 覆盖（CI/海外可置空直连）。
+# 本地（Windows/代理环境）用 curl.exe 走代理；CI/海外直连（MEXC_PROXY 置空）用 urllib。
+# 环境变量 MEXC_PROXY 覆盖：本地默认 http://127.0.0.1:7897，GitHub Actions 置空直连。
 import subprocess
 
 PROXY = os.environ.get('MEXC_PROXY', 'http://127.0.0.1:7897').strip()
@@ -68,23 +68,24 @@ def fetch_klines(symbol, interval, limit):
     url = f'{API}?symbol={symbol}&interval={interval}&limit={limit}'
     last_err = None
     for attempt in range(5):
-        cmd = ['curl.exe', '-sS', '--max-time', '30', '-H', 'User-Agent: trae']
-        # 交替走代理 / 直连，绕过偶发 SSL 握手失败
-        use_proxy = PROXY and attempt % 2 == 0
-        cmd += ['-x', PROXY] if use_proxy else ['--noproxy', '*']
-        cmd.append(url)
-        proc = subprocess.run(cmd, capture_output=True, text=True)
-        if proc.returncode == 0:
-            try:
+        try:
+            if PROXY:
+                cmd = ['curl.exe', '-sS', '--max-time', '30', '-H', 'User-Agent: trae',
+                       '-x', PROXY, url]
+                proc = subprocess.run(cmd, capture_output=True, text=True)
+                if proc.returncode != 0:
+                    raise RuntimeError(proc.stderr.strip())
                 raw = json.loads(proc.stdout)
-                break
-            except Exception as e:
-                last_err = RuntimeError(f'{symbol} 解析响应失败: {e}')
-        else:
-            last_err = RuntimeError(f'curl 拉取失败 {symbol}: {proc.stderr.strip()}')
-        time.sleep(1 + attempt)
+            else:
+                req = urllib.request.Request(url, headers={'User-Agent': 'trae'})
+                with urllib.request.urlopen(req, timeout=30) as r:
+                    raw = json.loads(r.read().decode())
+            break
+        except Exception as e:
+            last_err = e
+            time.sleep(1 + attempt)
     else:
-        raise last_err
+        raise RuntimeError(f'拉取失败 {symbol}: {last_err}')
     rows = []
     for k in raw:
         rows.append({
